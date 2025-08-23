@@ -269,13 +269,19 @@ async function runApolloEnrichment(personInfo, apifyToken) {
         'Authorization': `Bearer ${apifyToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(apolloInput)
+      body: JSON.stringify(apolloInput),
+      timeout: 10000
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Apollo API Error Response:', errorText);
-      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
+      let errorText = 'No details available';
+      try {
+        errorText = await response.text();
+        console.error('❌ Apollo API Error Response:', errorText.substring(0, 500));
+      } catch (e) {
+        console.error('❌ Could not read Apollo error response:', e.message);
+      }
+      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText}`);
     }
     
     const runData = await response.json();
@@ -314,13 +320,19 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
         'Authorization': `Bearer ${apifyToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(linkedinInput)
+      body: JSON.stringify(linkedinInput),
+      timeout: 10000
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ LinkedIn API Error Response:', errorText);
-      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
+      let errorText = 'No details available';
+      try {
+        errorText = await response.text();
+        console.error('❌ LinkedIn API Error Response:', errorText.substring(0, 500));
+      } catch (e) {
+        console.error('❌ Could not read LinkedIn error response:', e.message);
+      }
+      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText}`);
     }
     
     const runData = await response.json();
