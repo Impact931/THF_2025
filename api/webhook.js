@@ -261,6 +261,8 @@ async function runApolloEnrichment(personInfo, apifyToken) {
       maxConcurrency: 1
     };
     
+    console.log('📤 Apollo Input:', JSON.stringify(apolloInput, null, 2));
+    
     const response = await fetch('https://api.apify.com/v2/acts/jljBwyyQakqrL1wae/runs', {
       method: 'POST',
       headers: {
@@ -271,7 +273,9 @@ async function runApolloEnrichment(personInfo, apifyToken) {
     });
     
     if (!response.ok) {
-      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('❌ Apollo API Error Response:', errorText);
+      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
     
     const runData = await response.json();
@@ -314,7 +318,9 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     });
     
     if (!response.ok) {
-      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('❌ LinkedIn API Error Response:', errorText);
+      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
     
     const runData = await response.json();
