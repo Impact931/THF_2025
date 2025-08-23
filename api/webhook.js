@@ -257,7 +257,8 @@ async function runApolloEnrichment(personInfo, apifyToken) {
     const apolloInput = {
       url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
       totalRecords: 50,
-      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}`
+      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}`,
+      maxConcurrency: 1
     };
     
     const response = await fetch('https://api.apify.com/v2/acts/jljBwyyQakqrL1wae/runs', {
