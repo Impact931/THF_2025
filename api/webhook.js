@@ -316,7 +316,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 Re-enabling BrightData LinkedIn scraper for testing');
+  console.log('🔗 BrightData LinkedIn scraper - handling CSRF token requirement');
   
   if (!personInfo.linkedin) {
     console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
@@ -325,26 +325,53 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
   
   try {
     const brightDataToken = 'b20a2b3f-af9b-4d32-8bfb-aaac9cb701b1';
+    const apiUrl = `https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236&token=${brightDataToken}`;
     
-    // BrightData LinkedIn scraper input
+    // Step 1: Get CSRF token by making an initial request
+    console.log('🔐 Getting CSRF token from BrightData...');
+    const csrfResponse = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'THF-Enrichment-Webhook/1.0'
+      }
+    });
+    
+    let csrfToken = null;
+    const cookieHeader = csrfResponse.headers.get('set-cookie');
+    if (cookieHeader) {
+      const csrfMatch = cookieHeader.match(/XSRF-TOKEN=([^;]+)/);
+      if (csrfMatch) {
+        csrfToken = csrfMatch[1];
+        console.log('✅ CSRF token obtained');
+      }
+    }
+    
+    if (!csrfToken) {
+      console.log('⚠️ Could not obtain CSRF token, trying without it...');
+    }
+    
+    // Step 2: Make the actual scraper request with CSRF token
     const linkedinInput = {
       url: personInfo.linkedin,
-      country: "US",
-      // Add any other BrightData specific parameters
+      country: "US"
     };
     
     console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
     
-    const apiUrl = `https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236&token=${brightDataToken}`;
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'THF-Enrichment-Webhook/1.0'
+    };
+    
+    if (csrfToken) {
+      headers['X-XSRF-TOKEN'] = csrfToken;
+      headers['Cookie'] = `XSRF-TOKEN=${csrfToken}`;
+    }
     
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'THF-Enrichment-Webhook/1.0'
-      },
-      body: JSON.stringify(linkedinInput),
-      timeout: 15000
+      headers: headers,
+      body: JSON.stringify(linkedinInput)
     });
     
     if (!response.ok) {
@@ -355,6 +382,17 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
       } catch (e) {
         console.error('❌ Could not read BrightData error response:', e.message);
       }
+      
+      // If CSRF error, return descriptive message but don't fail completely
+      if (errorText.includes('CSRF') || errorText.includes('csrf')) {
+        console.log('⚠️ CSRF token issue - BrightData API authentication needs adjustment');
+        return { 
+          success: false, 
+          error: 'CSRF token authentication issue with BrightData API',
+          data: { message: 'BrightData requires proper CSRF token handling' }
+        };
+      }
+      
       throw new Error(`BrightData LinkedIn scraper failed: ${response.status} ${response.statusText}`);
     }
     
