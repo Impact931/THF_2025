@@ -316,7 +316,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - using correct API format');
+  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API');
   
   if (!personInfo.name) {
     console.log('⚠️ No person name provided, skipping LinkedIn enrichment');
@@ -336,29 +336,36 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     
     console.log(`👤 Searching LinkedIn for: ${firstName} ${lastName}`);
     
-    // BrightData API configuration from screenshot
-    const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012';
-    const snapshotId = 'Jynh132v19n82v81kx'; // From the interface
+    // BrightData API configuration - complete API key provided
+    const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012bf7267e5f6';
+    const datasetId = 'gd_l1viktl72bvl7bjuj0';
     
-    // Correct BrightData LinkedIn "discover by name" input format
-    const linkedinInput = {
+    // BrightData datasets v3 API endpoint
+    const apiUrl = 'https://api.brightdata.com/datasets/v3/trigger';
+    const params = new URLSearchParams({
+      dataset_id: datasetId,
+      include_errors: 'true',
+      type: 'discover_new',
+      discover_by: 'name'
+    });
+    
+    // Input data - first_name and last_name as separate fields
+    const linkedinInput = [{
       first_name: firstName,
       last_name: lastName
-    };
+    }];
     
     console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
+    console.log('🌐 API URL:', `${apiUrl}?${params.toString()}`);
     
-    // Use the trigger data collection API endpoint
-    const apiUrl = `https://api.brightdata.com/datacollector/trigger?collector_name=gd_l1viktl72bvl7bjuj0&format=json`;
-    
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${apiUrl}?${params.toString()}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'User-Agent': 'THF-Enrichment-Webhook/1.0'
       },
-      body: JSON.stringify([linkedinInput]) // Array of inputs
+      body: JSON.stringify(linkedinInput)
     });
     
     console.log('📊 BrightData Response Status:', response.status, response.statusText);
