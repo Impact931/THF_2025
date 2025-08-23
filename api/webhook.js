@@ -301,7 +301,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 Running LinkedIn scraper for:', personInfo.linkedin);
+  console.log('🔗 Running LinkedIn scraper via BrightData for:', personInfo.linkedin);
   
   if (!personInfo.linkedin) {
     console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
@@ -309,44 +309,49 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
   }
   
   try {
+    const brightDataToken = '92f15c92ad2360d0b338bb1b3900541732c0bf4f75a200a75736aa05d747f9e9';
+    
+    // BrightData LinkedIn scraper input
     const linkedinInput = {
-      urls: [personInfo.linkedin],
-      maxConcurrency: 1
+      url: personInfo.linkedin,
+      country: "US",
+      // Add any other BrightData specific parameters
     };
     
-    const response = await fetch('https://api.apify.com/v2/acts/PEgClm7RgRD7YO94b/runs', {
+    console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
+    
+    const response = await fetch('https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apifyToken}`,
+        'Authorization': `Bearer ${brightDataToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(linkedinInput),
-      timeout: 10000
+      timeout: 15000
     });
     
     if (!response.ok) {
       let errorText = 'No details available';
       try {
         errorText = await response.text();
-        console.error('❌ LinkedIn API Error Response:', errorText.substring(0, 500));
+        console.error('❌ BrightData LinkedIn API Error Response:', errorText.substring(0, 500));
       } catch (e) {
-        console.error('❌ Could not read LinkedIn error response:', e.message);
+        console.error('❌ Could not read BrightData error response:', e.message);
       }
-      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText}`);
+      throw new Error(`BrightData LinkedIn scraper failed: ${response.status} ${response.statusText}`);
     }
     
-    const runData = await response.json();
-    console.log('✅ LinkedIn scraper initiated:', runData.data.id);
+    const result = await response.json();
+    console.log('✅ BrightData LinkedIn scraper completed successfully');
+    console.log('📊 LinkedIn data received:', JSON.stringify(result, null, 2).substring(0, 1000));
     
-    // For now, return success - in production we'd wait for results  
     return { 
       success: true, 
-      runId: runData.data.id, 
-      data: { message: 'LinkedIn enrichment initiated' } 
+      data: result 
     };
     
   } catch (error) {
-    console.error('❌ LinkedIn enrichment failed:', error);
+    console.error('❌ BrightData LinkedIn enrichment failed:', error);
     return { success: false, error: error.message, data: null };
   }
 }
