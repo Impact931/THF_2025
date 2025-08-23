@@ -316,12 +316,25 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 Running LinkedIn scraper via BrightData for:', personInfo.linkedin);
+  console.log('🔗 BrightData LinkedIn temporarily disabled - focusing on Enrichment DB first');
   
   if (!personInfo.linkedin) {
     console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
     return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
+  
+  // Temporarily disable BrightData to focus on Enrichment DB storage
+  console.log('💾 Skipping BrightData to test Enrichment DB storage first');
+  return { 
+    success: true, 
+    data: { 
+      message: 'BrightData temporarily disabled - testing Enrichment DB',
+      mockLinkedInData: {
+        name: personInfo.name,
+        profile_url: personInfo.linkedin
+      }
+    } 
+  };
   
   try {
     const brightDataToken = 'b20a2b3f-af9b-4d32-8bfb-aaac9cb701b1';
@@ -379,25 +392,14 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
-    // Use basic field names that should exist in most databases
+    // Start with just the basic Name field that should exist in all databases
     const enrichmentRecord = {
-      "Person Name": {
+      "Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       }
     };
     
-    // Add optional fields only if they have values
-    if (personInfo.email) {
-      enrichmentRecord["Email"] = {
-        "email": personInfo.email
-      };
-    }
-    
-    if (personInfo.linkedin) {
-      enrichmentRecord["LinkedIn URL"] = {
-        "url": personInfo.linkedin
-      };
-    }
+    console.log('📝 Enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
