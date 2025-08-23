@@ -316,52 +316,36 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - using correct API format');
+  console.log('🔗 Running LinkedIn scraper via BrightData for:', personInfo.linkedin);
   
-  if (!personInfo.name) {
-    console.log('⚠️ No person name provided, skipping LinkedIn enrichment');
-    return { success: false, error: 'No person name provided', data: null };
+  if (!personInfo.linkedin) {
+    console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
+    return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
   
   try {
-    // Extract first and last name from full name
-    const nameParts = personInfo.name.trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    const brightDataToken = 'b20a2b3f-af9b-4d32-8bfb-aaac9cb701b1';
     
-    if (!firstName || !lastName) {
-      console.log('⚠️ Could not extract first and last name from:', personInfo.name);
-      return { success: false, error: 'Could not parse first and last name', data: null };
-    }
-    
-    console.log(`👤 Searching LinkedIn for: ${firstName} ${lastName}`);
-    
-    // BrightData API configuration from screenshot
-    const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012';
-    const snapshotId = 'Jynh132v19n82v81kx'; // From the interface
-    
-    // Correct BrightData LinkedIn "discover by name" input format
+    // BrightData LinkedIn scraper input
     const linkedinInput = {
-      first_name: firstName,
-      last_name: lastName
+      url: personInfo.linkedin,
+      country: "US",
+      // Add any other BrightData specific parameters
     };
     
     console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
     
-    // Use the trigger data collection API endpoint
-    const apiUrl = `https://api.brightdata.com/datacollector/trigger?collector_name=gd_l1viktl72bvl7bjuj0&format=json`;
+    const apiUrl = `https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236&token=${brightDataToken}`;
     
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'User-Agent': 'THF-Enrichment-Webhook/1.0'
       },
-      body: JSON.stringify([linkedinInput]) // Array of inputs
+      body: JSON.stringify(linkedinInput),
+      timeout: 15000
     });
-    
-    console.log('📊 BrightData Response Status:', response.status, response.statusText);
     
     if (!response.ok) {
       let errorText = 'No details available';
@@ -371,8 +355,7 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
       } catch (e) {
         console.error('❌ Could not read BrightData error response:', e.message);
       }
-      
-      throw new Error(`BrightData LinkedIn scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(`BrightData LinkedIn scraper failed: ${response.status} ${response.statusText}`);
     }
     
     const result = await response.json();
@@ -396,14 +379,25 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
-    // Start with just the basic Name field that should exist in all databases
+    // Use basic field names that should exist in most databases
     const enrichmentRecord = {
-      "Name": {
+      "Person Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       }
     };
     
-    console.log('📝 Enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
+    // Add optional fields only if they have values
+    if (personInfo.email) {
+      enrichmentRecord["Email"] = {
+        "email": personInfo.email
+      };
+    }
+    
+    if (personInfo.linkedin) {
+      enrichmentRecord["LinkedIn URL"] = {
+        "url": personInfo.linkedin
+      };
+    }
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
