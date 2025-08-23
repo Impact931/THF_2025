@@ -316,7 +316,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API (LATEST)');
+  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API');
   
   if (!personInfo.name) {
     console.log('⚠️ No person name provided, skipping LinkedIn enrichment');
@@ -339,6 +339,9 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     // BrightData API configuration - complete API key provided
     const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012bf7267e5f6';
     const datasetId = 'gd_l1viktl72bvl7bjuj0';
+    
+    console.log('🔑 API Key length:', apiKey.length);
+    console.log('📊 Dataset ID:', datasetId);
     
     // BrightData datasets v3 API endpoint
     const apiUrl = 'https://api.brightdata.com/datasets/v3/trigger';
