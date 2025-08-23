@@ -371,17 +371,25 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
+    // Use basic field names that should exist in most databases
     const enrichmentRecord = {
-      "Name": {
+      "Person Name": {
         "title": [{ "text": { "content": personInfo.name } }]
-      },
-      "Primary Email": {
-        "email": personInfo.email
-      },
-      "LinkedIn Profile": {
-        "url": personInfo.linkedin
       }
     };
+    
+    // Add optional fields only if they have values
+    if (personInfo.email) {
+      enrichmentRecord["Email"] = {
+        "email": personInfo.email
+      };
+    }
+    
+    if (personInfo.linkedin) {
+      enrichmentRecord["LinkedIn URL"] = {
+        "url": personInfo.linkedin
+      };
+    }
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
