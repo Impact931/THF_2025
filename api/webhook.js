@@ -267,13 +267,13 @@ async function runApolloEnrichment(personInfo, apifyToken) {
     const linkedinHandle = personInfo.linkedin.split('/').pop() || personInfo.linkedin;
     
     const apolloInput = {
-      // Option 1: Direct LinkedIn URL search
-      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_linkedin_url=${encodeURIComponent(personInfo.linkedin)}`,
-      // Option 2: Backup with name + LinkedIn handle for verification
-      verificationUrl: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name + ' ' + linkedinHandle)}`,
+      // Use combined search: name + LinkedIn handle for accuracy while meeting Apollo's search requirements
+      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name + ' ' + linkedinHandle)}`,
+      // Include LinkedIn URL in metadata for verification
       linkedinUrl: personInfo.linkedin,
       targetName: personInfo.name,
-      totalRecords: 50, // Reduced since we're targeting one specific person
+      searchMethod: 'name_plus_linkedin_handle',
+      totalRecords: 500, // Apollo requires minimum 500 records
       fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}_LinkedIn_Verified`,
       maxConcurrency: 1
     };
