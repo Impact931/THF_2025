@@ -255,9 +255,9 @@ async function runApolloEnrichment(personInfo, apifyToken) {
   
   try {
     const apolloInput = {
-      searchUrl: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
-      maxResults: 10,
-      outputFields: ['name', 'email', 'phone', 'title', 'company', 'linkedin_url', 'location']
+      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
+      totalRecords: 50,
+      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}`
     };
     
     const response = await fetch('https://api.apify.com/v2/acts/jljBwyyQakqrL1wae/runs', {
@@ -299,9 +299,8 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
   
   try {
     const linkedinInput = {
-      profileUrls: [personInfo.linkedin],
-      maxConcurrency: 1,
-      outputFields: ['fullName', 'headline', 'location', 'experience', 'education', 'skills', 'connections']
+      urls: [personInfo.linkedin],
+      maxConcurrency: 1
     };
     
     const response = await fetch('https://api.apify.com/v2/acts/PEgClm7RgRD7YO94b/runs', {
@@ -343,29 +342,11 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
       "Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       },
-      "Source Person ID": {
-        "rich_text": [{ "text": { "content": personInfo.id } }]
-      },
       "Primary Email": {
         "email": personInfo.email
       },
       "LinkedIn Profile": {
         "url": personInfo.linkedin
-      },
-      "Employer": {
-        "rich_text": [{ "text": { "content": personInfo.employer || "" } }]
-      },
-      "Enrichment Status": {
-        "select": { "name": "In Progress" }
-      },
-      "Last Enriched": {
-        "date": { "start": new Date().toISOString().split('T')[0] }
-      },
-      "Apollo Status": {
-        "select": { "name": apolloData ? "Initiated" : "Failed" }
-      },
-      "LinkedIn Status": {
-        "select": { "name": linkedinData ? "Initiated" : "Failed" }
       }
     };
     
