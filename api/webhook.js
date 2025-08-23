@@ -251,30 +251,47 @@ async function triggerEnrichment(personInfo, webhookData) {
 }
 
 async function runApolloEnrichment(personInfo, apifyToken) {
-  console.log('🚀 Apollo scraper ENABLED - searching by LinkedIn URL for 100% accuracy');
+  console.log('🚀 Apollo scraper ENABLED - FULL ENRICHMENT with all available data');
   
-  if (!personInfo.linkedin) {
-    console.log('⚠️ No LinkedIn URL provided for Apollo scraping');
-    return { success: false, error: 'No LinkedIn URL provided for Apollo enrichment', data: null };
+  if (!personInfo.name) {
+    console.log('⚠️ No person name provided for Apollo scraping');
+    return { success: false, error: 'No person name provided for Apollo enrichment', data: null };
   }
   
-  console.log(`🎯 Apollo searching for exact person: ${personInfo.name}`);
-  console.log(`🔗 Using LinkedIn URL for 100% verification: ${personInfo.linkedin}`);
+  console.log(`🎯 Apollo FULL DATA ENRICHMENT for: ${personInfo.name}`);
+  console.log(`🏢 Employer: ${personInfo.employer || 'N/A'}`);
+  console.log(`📧 Email: ${personInfo.email || 'N/A'}`);
+  console.log(`🔗 LinkedIn: ${personInfo.linkedin || 'N/A'}`);
   
   try {
-    // Apollo input using LinkedIn URL for precise targeting
-    // Try different Apollo search approaches for LinkedIn URL matching
-    const linkedinHandle = personInfo.linkedin.split('/').pop() || personInfo.linkedin;
+    // Build comprehensive search query using ALL available information
+    let searchTerms = [personInfo.name];
+    
+    if (personInfo.employer) {
+      searchTerms.push(personInfo.employer);
+    }
+    
+    if (personInfo.email) {
+      searchTerms.push(personInfo.email);
+    }
+    
+    const searchQuery = searchTerms.join(' ');
+    console.log(`🔍 Comprehensive Apollo search query: "${searchQuery}"`);
     
     const apolloInput = {
-      // Use combined search: name + LinkedIn handle for accuracy while meeting Apollo's search requirements
-      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name + ' ' + linkedinHandle)}`,
-      // Include LinkedIn URL in metadata for verification
-      linkedinUrl: personInfo.linkedin,
-      targetName: personInfo.name,
-      searchMethod: 'name_plus_linkedin_handle',
+      // Use ALL available data for maximum search accuracy
+      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(searchQuery)}`,
+      // Include all person data for verification
+      personData: {
+        name: personInfo.name,
+        employer: personInfo.employer,
+        email: personInfo.email,
+        linkedin: personInfo.linkedin,
+        position: personInfo.position
+      },
+      searchMethod: 'comprehensive_multi_field',
       totalRecords: 500, // Apollo requires minimum 500 records
-      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}_LinkedIn_Verified`,
+      fileName: `Apollo_Full_Enrichment_${personInfo.name.replace(/\s+/g, '_')}`,
       maxConcurrency: 1
     };
     
@@ -294,7 +311,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
       let errorText = 'No details available';
       try {
         errorText = await response.text();
-        console.error('❌ Apollo API Error Response:', errorText.substring(0, 500));
+        console.error('❌ Apollo API Error Response (FULL):', errorText);
       } catch (e) {
         console.error('❌ Could not read Apollo error response:', e.message);
       }
@@ -303,12 +320,20 @@ async function runApolloEnrichment(personInfo, apifyToken) {
     
     const runData = await response.json();
     console.log('✅ Apollo scraper initiated:', runData.data.id);
+    console.log('📊 FULL Apollo Response Data (NO TRUNCATION):');
+    console.log(JSON.stringify(runData, null, 2));
     
-    // For now, return success - in production we'd wait for results
+    // Return comprehensive data including the run information
     return { 
       success: true, 
       runId: runData.data.id, 
-      data: { message: 'Apollo enrichment initiated' } 
+      data: {
+        message: 'Apollo full enrichment initiated',
+        runInfo: runData,
+        searchQuery: searchQuery,
+        personData: personInfo,
+        apolloUrl: apolloInput.url
+      }
     };
     
   } catch (error) {
