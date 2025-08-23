@@ -316,25 +316,12 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn temporarily disabled - focusing on Enrichment DB first');
+  console.log('🔗 Re-enabling BrightData LinkedIn scraper for testing');
   
   if (!personInfo.linkedin) {
     console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
     return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
-  
-  // Temporarily disable BrightData to focus on Enrichment DB storage
-  console.log('💾 Skipping BrightData to test Enrichment DB storage first');
-  return { 
-    success: true, 
-    data: { 
-      message: 'BrightData temporarily disabled - testing Enrichment DB',
-      mockLinkedInData: {
-        name: personInfo.name,
-        profile_url: personInfo.linkedin
-      }
-    } 
-  };
   
   try {
     const brightDataToken = 'b20a2b3f-af9b-4d32-8bfb-aaac9cb701b1';
