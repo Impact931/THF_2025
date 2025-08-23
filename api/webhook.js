@@ -57,9 +57,13 @@ export default async function handler(req, res) {
       try {
         const enrichmentResult = await triggerEnrichment(personInfo, webhookData);
         
+        // Determine response based on enrichment results
+        const isSuccess = enrichmentResult.status === 'completed' || enrichmentResult.status === 'partially_completed';
+        const statusCode = isSuccess ? 200 : 500;
+        
         const result = {
-          success: true,
-          message: 'Enrichment process initiated successfully',
+          success: isSuccess,
+          message: isSuccess ? 'Enrichment process completed' : 'Enrichment process failed',
           person_name: personInfo.name,
           person_id: personInfo.id,
           timestamp: new Date().toISOString(),
@@ -67,11 +71,12 @@ export default async function handler(req, res) {
           apollo_success: enrichmentResult.apollo_success,
           linkedin_success: enrichmentResult.linkedin_success,
           storage_success: enrichmentResult.storage_success,
+          error: enrichmentResult.error || null,
           extracted_info: personInfo
         };
 
         console.log('📤 Enrichment completed:', result);
-        return res.status(200).json(result);
+        return res.status(statusCode).json(result);
         
       } catch (enrichmentError) {
         console.error('❌ Enrichment failed:', enrichmentError);
@@ -215,13 +220,31 @@ async function triggerEnrichment(personInfo, webhookData) {
     const storageResult = await storeEnrichedData(personInfo, apolloResult.data, linkedinResult.data, notionToken);
     enrichmentResult.storage_success = storageResult.success;
     
-    enrichmentResult.status = 'completed';
-    console.log('✅ Enrichment process completed successfully');
+    // Determine overall status based on results
+    if (enrichmentResult.apollo_success || enrichmentResult.linkedin_success || enrichmentResult.storage_success) {
+      enrichmentResult.status = 'partially_completed';
+    } else {
+      enrichmentResult.status = 'failed';
+    }
+    
+    if (enrichmentResult.apollo_success && enrichmentResult.linkedin_success && enrichmentResult.storage_success) {
+      enrichmentResult.status = 'completed';
+      console.log('✅ Enrichment process completed successfully');
+    } else {
+      console.log('⚠️ Enrichment process completed with errors');
+    }
     
   } catch (error) {
     console.error('❌ Enrichment process failed:', error);
     enrichmentResult.status = 'failed';
     enrichmentResult.error = error.message;
+  }
+  
+  // Update the original People DB record status based on results
+  try {
+    await updatePersonStatus(personInfo.id, enrichmentResult.status, notionToken);
+  } catch (statusError) {
+    console.error('❌ Failed to update person status:', statusError);
   }
   
   return enrichmentResult;
@@ -370,6 +393,55 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
     
   } catch (error) {
     console.error('❌ Failed to store enriched data:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function updatePersonStatus(personId, enrichmentStatus, notionToken) {
+  console.log(`🔄 Updating person status to: ${enrichmentStatus}`);
+  
+  // Map enrichment status to Notion status values
+  let notionStatus;
+  switch (enrichmentStatus) {
+    case 'completed':
+      notionStatus = 'Completed';
+      break;
+    case 'failed':
+      notionStatus = 'Failed';
+      break;
+    case 'partially_completed':
+      notionStatus = 'Completed'; // Consider partial success as completed
+      break;
+    default:
+      notionStatus = 'Failed';
+  }
+  
+  try {
+    const response = await fetch(`https://api.notion.com/v1/pages/${personId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        properties: {
+          "Status": {
+            "select": { "name": notionStatus }
+          }
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to update status: ${response.status} ${response.statusText}`);
+    }
+    
+    console.log(`✅ Person status updated to: ${notionStatus}`);
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ Failed to update person status:', error);
     return { success: false, error: error.message };
   }
 }
