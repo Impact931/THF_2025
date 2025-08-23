@@ -256,7 +256,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
   try {
     const apolloInput = {
       url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
-      totalRecords: 50,
+      totalRecords: 500,
       fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}`,
       maxConcurrency: 1
     };
