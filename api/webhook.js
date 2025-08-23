@@ -51,27 +51,43 @@ export default async function handler(req, res) {
 
       console.log('✅ Person extracted:', personInfo);
       
-      // TODO: Here we would call the Python enrichment service
-      // For now, just log that we would start enrichment
-      console.log('🚀 Would start enrichment for:', personInfo.name);
+      // Trigger the actual enrichment process
+      console.log('🚀 Starting enrichment for:', personInfo.name);
       
-      const result = {
-        success: true,
-        message: 'Webhook processed successfully',
-        person_name: personInfo.name,
-        person_id: personInfo.id,
-        timestamp: new Date().toISOString(),
-        next_steps: [
-          'Apollo enrichment would run',
-          'LinkedIn enrichment would run', 
-          'Data would be stored in Enrichment DB',
-          'People DB status would be updated'
-        ],
-        extracted_info: personInfo
-      };
+      try {
+        const enrichmentResult = await triggerEnrichment(personInfo, webhookData);
+        
+        const result = {
+          success: true,
+          message: 'Enrichment process initiated successfully',
+          person_name: personInfo.name,
+          person_id: personInfo.id,
+          timestamp: new Date().toISOString(),
+          enrichment_status: enrichmentResult.status,
+          apollo_success: enrichmentResult.apollo_success,
+          linkedin_success: enrichmentResult.linkedin_success,
+          storage_success: enrichmentResult.storage_success,
+          extracted_info: personInfo
+        };
 
-      console.log('📤 Returning success:', result);
-      return res.status(200).json(result);
+        console.log('📤 Enrichment completed:', result);
+        return res.status(200).json(result);
+        
+      } catch (enrichmentError) {
+        console.error('❌ Enrichment failed:', enrichmentError);
+        
+        const result = {
+          success: false,
+          message: 'Enrichment process failed',
+          person_name: personInfo.name,
+          person_id: personInfo.id,
+          timestamp: new Date().toISOString(),
+          error: enrichmentError.message,
+          extracted_info: personInfo
+        };
+
+        return res.status(500).json(result);
+      }
 
     } catch (error) {
       console.error('❌ Webhook processing error:', error);
@@ -164,4 +180,196 @@ function extractPersonFromWebhook(webhookData) {
 
   console.log('✅ Extracted person info:', result);
   return result;
+}
+
+async function triggerEnrichment(personInfo, webhookData) {
+  console.log('🔧 Starting Apify enrichment process...');
+  
+  const apifyToken = process.env.APIFY_TOKEN;
+  const notionToken = process.env.NOTION_TOKEN;
+  
+  if (!apifyToken || !notionToken) {
+    throw new Error('Missing required environment variables: APIFY_TOKEN or NOTION_TOKEN');
+  }
+  
+  const enrichmentResult = {
+    status: 'processing',
+    apollo_success: false,
+    linkedin_success: false,
+    storage_success: false
+  };
+  
+  try {
+    // Run Apollo enrichment
+    console.log('🚀 Starting Apollo enrichment...');
+    const apolloResult = await runApolloEnrichment(personInfo, apifyToken);
+    enrichmentResult.apollo_success = apolloResult.success;
+    
+    // Run LinkedIn enrichment  
+    console.log('🔗 Starting LinkedIn enrichment...');
+    const linkedinResult = await runLinkedInEnrichment(personInfo, apifyToken);
+    enrichmentResult.linkedin_success = linkedinResult.success;
+    
+    // Store enriched data in Enrichment DB
+    console.log('💾 Storing enriched data...');
+    const storageResult = await storeEnrichedData(personInfo, apolloResult.data, linkedinResult.data, notionToken);
+    enrichmentResult.storage_success = storageResult.success;
+    
+    enrichmentResult.status = 'completed';
+    console.log('✅ Enrichment process completed successfully');
+    
+  } catch (error) {
+    console.error('❌ Enrichment process failed:', error);
+    enrichmentResult.status = 'failed';
+    enrichmentResult.error = error.message;
+  }
+  
+  return enrichmentResult;
+}
+
+async function runApolloEnrichment(personInfo, apifyToken) {
+  console.log('🔍 Running Apollo scraper for:', personInfo.name);
+  
+  try {
+    const apolloInput = {
+      searchUrl: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
+      maxResults: 10,
+      outputFields: ['name', 'email', 'phone', 'title', 'company', 'linkedin_url', 'location']
+    };
+    
+    const response = await fetch('https://api.apify.com/v2/acts/jljBwyyQakqrL1wae/runs', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apifyToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(apolloInput)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const runData = await response.json();
+    console.log('✅ Apollo scraper initiated:', runData.data.id);
+    
+    // For now, return success - in production we'd wait for results
+    return { 
+      success: true, 
+      runId: runData.data.id, 
+      data: { message: 'Apollo enrichment initiated' } 
+    };
+    
+  } catch (error) {
+    console.error('❌ Apollo enrichment failed:', error);
+    return { success: false, error: error.message, data: null };
+  }
+}
+
+async function runLinkedInEnrichment(personInfo, apifyToken) {
+  console.log('🔗 Running LinkedIn scraper for:', personInfo.linkedin);
+  
+  if (!personInfo.linkedin) {
+    console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
+    return { success: false, error: 'No LinkedIn URL provided', data: null };
+  }
+  
+  try {
+    const linkedinInput = {
+      profileUrls: [personInfo.linkedin],
+      maxConcurrency: 1,
+      outputFields: ['fullName', 'headline', 'location', 'experience', 'education', 'skills', 'connections']
+    };
+    
+    const response = await fetch('https://api.apify.com/v2/acts/PEgClm7RgRD7YO94b/runs', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apifyToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(linkedinInput)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`LinkedIn scraper failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const runData = await response.json();
+    console.log('✅ LinkedIn scraper initiated:', runData.data.id);
+    
+    // For now, return success - in production we'd wait for results  
+    return { 
+      success: true, 
+      runId: runData.data.id, 
+      data: { message: 'LinkedIn enrichment initiated' } 
+    };
+    
+  } catch (error) {
+    console.error('❌ LinkedIn enrichment failed:', error);
+    return { success: false, error: error.message, data: null };
+  }
+}
+
+async function storeEnrichedData(personInfo, apolloData, linkedinData, notionToken) {
+  console.log('💾 Storing enriched data in Enrichment DB...');
+  
+  const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
+  
+  try {
+    const enrichmentRecord = {
+      "Name": {
+        "title": [{ "text": { "content": personInfo.name } }]
+      },
+      "Source Person ID": {
+        "rich_text": [{ "text": { "content": personInfo.id } }]
+      },
+      "Primary Email": {
+        "email": personInfo.email
+      },
+      "LinkedIn Profile": {
+        "url": personInfo.linkedin
+      },
+      "Employer": {
+        "rich_text": [{ "text": { "content": personInfo.employer || "" } }]
+      },
+      "Enrichment Status": {
+        "select": { "name": "In Progress" }
+      },
+      "Last Enriched": {
+        "date": { "start": new Date().toISOString().split('T')[0] }
+      },
+      "Apollo Status": {
+        "select": { "name": apolloData ? "Initiated" : "Failed" }
+      },
+      "LinkedIn Status": {
+        "select": { "name": linkedinData ? "Initiated" : "Failed" }
+      }
+    };
+    
+    const response = await fetch(`https://api.notion.com/v1/pages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        parent: { database_id: enrichmentDbId },
+        properties: enrichmentRecord
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to store enrichment data: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Enrichment record created:', result.id);
+    
+    return { success: true, recordId: result.id };
+    
+  } catch (error) {
+    console.error('❌ Failed to store enriched data:', error);
+    return { success: false, error: error.message };
+  }
 }
