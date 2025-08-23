@@ -251,7 +251,22 @@ async function triggerEnrichment(personInfo, webhookData) {
 }
 
 async function runApolloEnrichment(personInfo, apifyToken) {
-  console.log('🔍 Running Apollo scraper for:', personInfo.name);
+  console.log('🔍 Apollo scraper temporarily disabled for testing - using mock data');
+  
+  // Temporarily disable Apollo to avoid charges while testing
+  console.log('💰 Avoiding Apollo charges - returning mock success data');
+  return { 
+    success: true, 
+    runId: 'mock-apollo-run-id', 
+    data: { 
+      message: 'Apollo temporarily disabled for testing',
+      mockData: {
+        name: personInfo.name,
+        company: personInfo.employer,
+        email: personInfo.email
+      }
+    } 
+  };
   
   try {
     const apolloInput = {
@@ -308,15 +323,8 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
   
-  // Temporarily disable BrightData while debugging authentication
-  console.log('⚠️ BrightData LinkedIn temporarily disabled for debugging');
-  return { 
-    success: true, 
-    data: { message: 'BrightData LinkedIn temporarily disabled' } 
-  };
-  
   try {
-    const brightDataToken = '92f15c92ad2360d0b338bb1b3900541732c0bf4f75a200a75736aa05d747f9e9';
+    const brightDataToken = 'b20a2b3f-af9b-4d32-8bfb-aaac9cb701b1';
     
     // BrightData LinkedIn scraper input
     const linkedinInput = {
