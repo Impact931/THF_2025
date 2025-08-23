@@ -316,46 +316,39 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API');
+  console.log('🔗 BrightData LinkedIn scraper - collecting 1st degree connections');
   
-  if (!personInfo.name) {
-    console.log('⚠️ No person name provided, skipping LinkedIn enrichment');
-    return { success: false, error: 'No person name provided', data: null };
+  if (!personInfo.linkedin) {
+    console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
+    return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
   
   try {
-    // Extract first and last name from full name
-    const nameParts = personInfo.name.trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    console.log(`🔗 Collecting 1st degree connections for: ${personInfo.name}`);
+    console.log(`📋 LinkedIn Profile: ${personInfo.linkedin}`);
     
-    if (!firstName || !lastName) {
-      console.log('⚠️ Could not extract first and last name from:', personInfo.name);
-      return { success: false, error: 'Could not parse first and last name', data: null };
-    }
-    
-    console.log(`👤 Searching LinkedIn for: ${firstName} ${lastName}`);
-    
-    // BrightData API configuration - complete API key provided
+    // BrightData API configuration for collecting connections by URL
     const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012bf7267e5f6';
-    const datasetId = 'gd_l1viktl72bvl7bjuj0';
+    const datasetId = 'gd_l1viktl72bvl7bjuj0'; // This might need to be updated for URL collection
     
     console.log('🔑 API Key length:', apiKey.length);
     console.log('📊 Dataset ID:', datasetId);
     
-    // BrightData datasets v3 API endpoint
+    // BrightData datasets v3 API endpoint for URL-based collection
     const apiUrl = 'https://api.brightdata.com/datasets/v3/trigger';
     const params = new URLSearchParams({
       dataset_id: datasetId,
       include_errors: 'true',
       type: 'discover_new',
-      discover_by: 'name'
+      discover_by: 'url', // Changed from 'name' to 'url'
+      webhook_notification_url: 'https://thf-2025.vercel.app/api/brightdata-webhook' // Add webhook URL
     });
     
-    // Input data - first_name and last_name as separate fields
+    // Input data - LinkedIn URL for collecting connections
     const linkedinInput = [{
-      first_name: firstName,
-      last_name: lastName
+      url: personInfo.linkedin,
+      collect_connections: true, // Request 1st degree connections
+      max_connections: 500 // Limit to avoid excessive charges
     }];
     
     console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
@@ -386,12 +379,13 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     }
     
     const result = await response.json();
-    console.log('✅ BrightData LinkedIn scraper completed successfully');
-    console.log('📊 LinkedIn data received:', JSON.stringify(result, null, 2).substring(0, 1000));
+    console.log('✅ BrightData LinkedIn connection collection initiated');
+    console.log('📊 Snapshot ID received:', JSON.stringify(result, null, 2));
     
     return { 
       success: true, 
-      data: result 
+      data: result,
+      message: '1st degree connection collection initiated - results will arrive via webhook'
     };
     
   } catch (error) {
