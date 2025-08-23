@@ -342,56 +342,21 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
       }
     };
     
-    // Add person info from Notion
-    if (personInfo.email) {
-      enrichmentRecord["Email"] = {
-        "email": personInfo.email
-      };
-    }
+    // Add minimal additional data that should exist in Enrichment DB
+    // Only add fields that are likely to exist - start conservative
     
-    if (personInfo.employer) {
-      enrichmentRecord["Company"] = {
-        "rich_text": [{ "text": { "content": personInfo.employer } }]
-      };
-    }
-    
-    if (personInfo.position) {
-      enrichmentRecord["Position"] = {
-        "rich_text": [{ "text": { "content": personInfo.position } }]
-      };
-    }
-    
-    if (personInfo.linkedin) {
-      enrichmentRecord["LinkedIn URL"] = {
-        "url": personInfo.linkedin
-      };
-    }
-    
-    // Add Apollo enrichment data
-    if (apolloData && apolloData.success) {
-      enrichmentRecord["Apollo Run ID"] = {
-        "rich_text": [{ "text": { "content": apolloData.runId || 'N/A' } }]
+    // Add Apollo enrichment status as rich text
+    if (apolloData) {
+      enrichmentRecord["Status"] = {
+        "rich_text": [{ "text": { "content": `Apollo: ${apolloData.success ? 'Success' : 'Failed'}` } }]
       };
       
-      enrichmentRecord["Apollo Status"] = {
-        "rich_text": [{ "text": { "content": apolloData.success ? 'Success' : 'Failed' } }]
-      };
-      
-      if (apolloData.data && typeof apolloData.data === 'object') {
-        enrichmentRecord["Apollo Data"] = {
-          "rich_text": [{ "text": { "content": JSON.stringify(apolloData.data).substring(0, 2000) } }]
+      if (apolloData.runId) {
+        enrichmentRecord["Notes"] = {
+          "rich_text": [{ "text": { "content": `Apollo Run: ${apolloData.runId} | Target: ${personInfo.name} (${personInfo.linkedin})` } }]
         };
       }
     }
-    
-    // Add enrichment metadata
-    enrichmentRecord["Enrichment Timestamp"] = {
-      "rich_text": [{ "text": { "content": new Date().toISOString() } }]
-    };
-    
-    enrichmentRecord["Data Sources"] = {
-      "rich_text": [{ "text": { "content": `Apollo: ${apolloData?.success ? 'Yes' : 'No'}, LinkedIn: ${linkedinData?.success ? 'Yes' : 'No'}` } }]
-    };
     
     console.log('📝 Enhanced enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
     
