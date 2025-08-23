@@ -251,22 +251,12 @@ async function triggerEnrichment(personInfo, webhookData) {
 }
 
 async function runApolloEnrichment(personInfo, apifyToken) {
-  console.log('🔍 Apollo scraper temporarily disabled for testing - using mock data');
+  console.log('🚀 Apollo scraper ENABLED - collecting professional data');
   
-  // Temporarily disable Apollo to avoid charges while testing
-  console.log('💰 Avoiding Apollo charges - returning mock success data');
-  return { 
-    success: true, 
-    runId: 'mock-apollo-run-id', 
-    data: { 
-      message: 'Apollo temporarily disabled for testing',
-      mockData: {
-        name: personInfo.name,
-        company: personInfo.employer,
-        email: personInfo.email
-      }
-    } 
-  };
+  if (!personInfo.name) {
+    console.log('⚠️ No person name provided for Apollo scraping');
+    return { success: false, error: 'No person name provided', data: null };
+  }
   
   try {
     const apolloInput = {
@@ -316,98 +306,82 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - collecting 1st degree connections');
+  console.log('🔗 BrightData LinkedIn scraper - TEMPORARILY DISABLED');
   
-  if (!personInfo.linkedin) {
-    console.log('⚠️ No LinkedIn URL provided, skipping LinkedIn enrichment');
-    return { success: false, error: 'No LinkedIn URL provided', data: null };
-  }
-  
-  try {
-    console.log(`🔗 Collecting 1st degree connections for: ${personInfo.name}`);
-    console.log(`📋 LinkedIn Profile: ${personInfo.linkedin}`);
-    
-    // BrightData API configuration for collecting connections by URL
-    const apiKey = 'f709421f8b3de28198171232a3795a144a2d21b3d77a4a898cc012bf7267e5f6';
-    const datasetId = 'gd_l1viktl72bvl7bjuj0'; // This might need to be updated for URL collection
-    
-    console.log('🔑 API Key length:', apiKey.length);
-    console.log('📊 Dataset ID:', datasetId);
-    
-    // BrightData datasets v3 API endpoint for URL-based collection
-    const apiUrl = 'https://api.brightdata.com/datasets/v3/trigger';
-    const params = new URLSearchParams({
-      dataset_id: datasetId,
-      include_errors: 'true',
-      type: 'discover_new',
-      discover_by: 'url', // Changed from 'name' to 'url'
-      webhook_notification_url: 'https://thf-2025.vercel.app/api/brightdata-webhook' // Add webhook URL
-    });
-    
-    // Input data - LinkedIn URL for collecting connections
-    const linkedinInput = [{
-      url: personInfo.linkedin,
-      collect_connections: true, // Request 1st degree connections
-      max_connections: 500 // Limit to avoid excessive charges
-    }];
-    
-    console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
-    console.log('🌐 API URL:', `${apiUrl}?${params.toString()}`);
-    
-    const response = await fetch(`${apiUrl}?${params.toString()}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'THF-Enrichment-Webhook/1.0'
-      },
-      body: JSON.stringify(linkedinInput)
-    });
-    
-    console.log('📊 BrightData Response Status:', response.status, response.statusText);
-    
-    if (!response.ok) {
-      let errorText = 'No details available';
-      try {
-        errorText = await response.text();
-        console.error('❌ BrightData LinkedIn API Error Response:', errorText.substring(0, 500));
-      } catch (e) {
-        console.error('❌ Could not read BrightData error response:', e.message);
-      }
-      
-      throw new Error(`BrightData LinkedIn scraper failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ BrightData LinkedIn connection collection initiated');
-    console.log('📊 Snapshot ID received:', JSON.stringify(result, null, 2));
-    
-    return { 
-      success: true, 
-      data: result,
-      message: '1st degree connection collection initiated - results will arrive via webhook'
-    };
-    
-  } catch (error) {
-    console.error('❌ BrightData LinkedIn enrichment failed:', error);
-    return { success: false, error: error.message, data: null };
-  }
+  // Temporarily disable BrightData to focus on Apollo integration
+  console.log('⏸️ BrightData paused - focusing on Apollo data collection');
+  return { 
+    success: false, 
+    error: 'BrightData temporarily disabled per user request',
+    data: { message: 'Focusing on Apollo scraper integration first' }
+  };
 }
 
 async function storeEnrichedData(personInfo, apolloData, linkedinData, notionToken) {
-  console.log('💾 Storing enriched data in Enrichment DB...');
+  console.log('💾 Storing enriched data with Apollo results in Enrichment DB...');
   
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
-    // Start with just the basic Name field that should exist in all databases
+    // Start with the basic Name field and add Apollo data
     const enrichmentRecord = {
       "Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       }
     };
     
-    console.log('📝 Enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
+    // Add person info from Notion
+    if (personInfo.email) {
+      enrichmentRecord["Email"] = {
+        "email": personInfo.email
+      };
+    }
+    
+    if (personInfo.employer) {
+      enrichmentRecord["Company"] = {
+        "rich_text": [{ "text": { "content": personInfo.employer } }]
+      };
+    }
+    
+    if (personInfo.position) {
+      enrichmentRecord["Position"] = {
+        "rich_text": [{ "text": { "content": personInfo.position } }]
+      };
+    }
+    
+    if (personInfo.linkedin) {
+      enrichmentRecord["LinkedIn URL"] = {
+        "url": personInfo.linkedin
+      };
+    }
+    
+    // Add Apollo enrichment data
+    if (apolloData && apolloData.success) {
+      enrichmentRecord["Apollo Run ID"] = {
+        "rich_text": [{ "text": { "content": apolloData.runId || 'N/A' } }]
+      };
+      
+      enrichmentRecord["Apollo Status"] = {
+        "rich_text": [{ "text": { "content": apolloData.success ? 'Success' : 'Failed' } }]
+      };
+      
+      if (apolloData.data && typeof apolloData.data === 'object') {
+        enrichmentRecord["Apollo Data"] = {
+          "rich_text": [{ "text": { "content": JSON.stringify(apolloData.data).substring(0, 2000) } }]
+        };
+      }
+    }
+    
+    // Add enrichment metadata
+    enrichmentRecord["Enrichment Timestamp"] = {
+      "rich_text": [{ "text": { "content": new Date().toISOString() } }]
+    };
+    
+    enrichmentRecord["Data Sources"] = {
+      "rich_text": [{ "text": { "content": `Apollo: ${apolloData?.success ? 'Yes' : 'No'}, LinkedIn: ${linkedinData?.success ? 'Yes' : 'No'}` } }]
+    };
+    
+    console.log('📝 Enhanced enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
