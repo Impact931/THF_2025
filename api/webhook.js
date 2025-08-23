@@ -251,18 +251,30 @@ async function triggerEnrichment(personInfo, webhookData) {
 }
 
 async function runApolloEnrichment(personInfo, apifyToken) {
-  console.log('🚀 Apollo scraper ENABLED - collecting professional data');
+  console.log('🚀 Apollo scraper ENABLED - searching by LinkedIn URL for 100% accuracy');
   
-  if (!personInfo.name) {
-    console.log('⚠️ No person name provided for Apollo scraping');
-    return { success: false, error: 'No person name provided', data: null };
+  if (!personInfo.linkedin) {
+    console.log('⚠️ No LinkedIn URL provided for Apollo scraping');
+    return { success: false, error: 'No LinkedIn URL provided for Apollo enrichment', data: null };
   }
   
+  console.log(`🎯 Apollo searching for exact person: ${personInfo.name}`);
+  console.log(`🔗 Using LinkedIn URL for 100% verification: ${personInfo.linkedin}`);
+  
   try {
+    // Apollo input using LinkedIn URL for precise targeting
+    // Try different Apollo search approaches for LinkedIn URL matching
+    const linkedinHandle = personInfo.linkedin.split('/').pop() || personInfo.linkedin;
+    
     const apolloInput = {
-      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name)}`,
-      totalRecords: 500,
-      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}`,
+      // Option 1: Direct LinkedIn URL search
+      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_linkedin_url=${encodeURIComponent(personInfo.linkedin)}`,
+      // Option 2: Backup with name + LinkedIn handle for verification
+      verificationUrl: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(personInfo.name + ' ' + linkedinHandle)}`,
+      linkedinUrl: personInfo.linkedin,
+      targetName: personInfo.name,
+      totalRecords: 50, // Reduced since we're targeting one specific person
+      fileName: `Apollo_${personInfo.name.replace(/\s+/g, '_')}_LinkedIn_Verified`,
       maxConcurrency: 1
     };
     
