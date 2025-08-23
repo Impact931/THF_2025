@@ -342,21 +342,9 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
       }
     };
     
-    // Add minimal additional data that should exist in Enrichment DB
-    // Only add fields that are likely to exist - start conservative
-    
-    // Add Apollo enrichment status as rich text
-    if (apolloData) {
-      enrichmentRecord["Status"] = {
-        "rich_text": [{ "text": { "content": `Apollo: ${apolloData.success ? 'Success' : 'Failed'}` } }]
-      };
-      
-      if (apolloData.runId) {
-        enrichmentRecord["Notes"] = {
-          "rich_text": [{ "text": { "content": `Apollo Run: ${apolloData.runId} | Target: ${personInfo.name} (${personInfo.linkedin})` } }]
-        };
-      }
-    }
+    // For now, just store the name until we identify the correct field names
+    // This ensures the record gets created successfully
+    console.log('📝 Storing minimal record (Name only) - Apollo data will be available via API logs');
     
     console.log('📝 Enhanced enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
     
