@@ -308,6 +308,13 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     return { success: false, error: 'No LinkedIn URL provided', data: null };
   }
   
+  // Temporarily disable BrightData while debugging authentication
+  console.log('⚠️ BrightData LinkedIn temporarily disabled for debugging');
+  return { 
+    success: true, 
+    data: { message: 'BrightData LinkedIn temporarily disabled' } 
+  };
+  
   try {
     const brightDataToken = '92f15c92ad2360d0b338bb1b3900541732c0bf4f75a200a75736aa05d747f9e9';
     
@@ -320,11 +327,13 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
     
     console.log('📤 BrightData LinkedIn Input:', JSON.stringify(linkedinInput, null, 2));
     
-    const response = await fetch('https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236', {
+    const apiUrl = `https://brightdata.com/cp/scrapers/api/gd_l1viktl72bvl7bjuj0/name/management_api?id=hl_272ba236&token=${brightDataToken}`;
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${brightDataToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'THF-Enrichment-Webhook/1.0'
       },
       body: JSON.stringify(linkedinInput),
       timeout: 15000
@@ -388,6 +397,13 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
     });
     
     if (!response.ok) {
+      let errorText = 'No error details available';
+      try {
+        errorText = await response.text();
+        console.error('❌ Notion Enrichment DB Error Response:', errorText.substring(0, 1000));
+      } catch (e) {
+        console.error('❌ Could not read Notion error response:', e.message);
+      }
       throw new Error(`Failed to store enrichment data: ${response.status} ${response.statusText}`);
     }
     
