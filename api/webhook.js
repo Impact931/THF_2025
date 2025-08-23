@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       message: '🎖️ THF Enrichment webhook is working!',
       timestamp: new Date().toISOString(),
       environment: {
-        apify_token_set: !!process.env.APIFY_TOKEN,
+        apollo_api_key_set: !!process.env.APOLLO_API_KEY,
         notion_token_set: !!process.env.NOTION_TOKEN,
         node_version: process.version
       },
@@ -188,13 +188,13 @@ function extractPersonFromWebhook(webhookData) {
 }
 
 async function triggerEnrichment(personInfo, webhookData) {
-  console.log('🔧 Starting Apify enrichment process...');
+  console.log('🔧 Starting Apollo Direct API enrichment process...');
   
-  const apifyToken = process.env.APIFY_TOKEN;
+  const apolloApiKey = process.env.APOLLO_API_KEY;
   const notionToken = process.env.NOTION_TOKEN;
   
-  if (!apifyToken || !notionToken) {
-    throw new Error('Missing required environment variables: APIFY_TOKEN or NOTION_TOKEN');
+  if (!apolloApiKey || !notionToken) {
+    throw new Error('Missing required environment variables: APOLLO_API_KEY or NOTION_TOKEN');
   }
   
   const enrichmentResult = {
@@ -205,9 +205,9 @@ async function triggerEnrichment(personInfo, webhookData) {
   };
   
   try {
-    // Run Apollo enrichment
-    console.log('🚀 Starting Apollo enrichment...');
-    const apolloResult = await runApolloEnrichment(personInfo, apifyToken);
+    // Run Apollo Direct API enrichment
+    console.log('🚀 Starting Apollo Direct API enrichment...');
+    const apolloResult = await runApolloEnrichment(personInfo, apolloApiKey);
     enrichmentResult.apollo_success = apolloResult.success;
     
     // Run LinkedIn enrichment  
@@ -250,94 +250,98 @@ async function triggerEnrichment(personInfo, webhookData) {
   return enrichmentResult;
 }
 
-async function runApolloEnrichment(personInfo, apifyToken) {
-  console.log('🚀 Apollo scraper ENABLED - FULL ENRICHMENT with all available data');
+async function runApolloEnrichment(personInfo, apolloApiKey) {
+  console.log('🎯 Apollo DIRECT API - People Enrichment with /people/match endpoint');
   
   if (!personInfo.name) {
-    console.log('⚠️ No person name provided for Apollo scraping');
+    console.log('⚠️ No person name provided for Apollo enrichment');
     return { success: false, error: 'No person name provided for Apollo enrichment', data: null };
   }
   
-  console.log(`🎯 Apollo FULL DATA ENRICHMENT for: ${personInfo.name}`);
-  console.log(`🏢 Employer: ${personInfo.employer || 'N/A'}`);
+  console.log(`👤 Apollo DIRECT ENRICHMENT for: ${personInfo.name}`);
+  console.log(`🏢 Company: ${personInfo.employer || 'N/A'}`);
   console.log(`📧 Email: ${personInfo.email || 'N/A'}`);
   console.log(`🔗 LinkedIn: ${personInfo.linkedin || 'N/A'}`);
+  console.log(`💼 Position: ${personInfo.position || 'N/A'}`);
   
   try {
-    // Build comprehensive search query using ALL available information
-    let searchTerms = [personInfo.name];
+    // Parse the person name into first and last name
+    const nameParts = personInfo.name.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
     
-    if (personInfo.employer) {
-      searchTerms.push(personInfo.employer);
-    }
-    
-    if (personInfo.email) {
-      searchTerms.push(personInfo.email);
-    }
-    
-    const searchQuery = searchTerms.join(' ');
-    console.log(`🔍 Comprehensive Apollo search query: "${searchQuery}"`);
-    
-    const apolloInput = {
-      // Use ALL available data for maximum search accuracy
-      url: `https://app.apollo.io/#/people?finderViewId=5b6dfc8b73f47a0001e44c3a&q_keywords=${encodeURIComponent(searchQuery)}`,
-      // Include all person data for verification
-      personData: {
-        name: personInfo.name,
-        employer: personInfo.employer,
-        email: personInfo.email,
-        linkedin: personInfo.linkedin,
-        position: personInfo.position
-      },
-      searchMethod: 'comprehensive_multi_field',
-      totalRecords: 500, // Apollo requires minimum 500 records
-      fileName: `Apollo_Full_Enrichment_${personInfo.name.replace(/\s+/g, '_')}`,
-      maxConcurrency: 1
+    // Build Apollo enrichment request with ALL available data
+    const enrichmentRequest = {
+      first_name: firstName,
+      last_name: lastName,
+      // Add all available information for better matching
     };
     
-    console.log('📤 Apollo Input:', JSON.stringify(apolloInput, null, 2));
+    // Add company information if available
+    if (personInfo.employer) {
+      enrichmentRequest.organization_name = personInfo.employer;
+    }
     
-    const response = await fetch('https://api.apify.com/v2/acts/jljBwyyQakqrL1wae/runs', {
+    // Add email if available
+    if (personInfo.email) {
+      enrichmentRequest.email = personInfo.email;
+    }
+    
+    // Add LinkedIn URL if available
+    if (personInfo.linkedin) {
+      enrichmentRequest.linkedin_url = personInfo.linkedin;
+    }
+    
+    // Add position/title if available
+    if (personInfo.position) {
+      enrichmentRequest.title = personInfo.position;
+    }
+    
+    // Enable personal contact details
+    enrichmentRequest.reveal_personal_emails = true;
+    enrichmentRequest.reveal_phone_number = true;
+    
+    console.log('📤 Apollo Direct API Request:', JSON.stringify(enrichmentRequest, null, 2));
+    
+    const response = await fetch('https://api.apollo.io/api/v1/people/match', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apifyToken}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'X-Api-Key': apolloApiKey
       },
-      body: JSON.stringify(apolloInput),
-      timeout: 10000
+      body: JSON.stringify(enrichmentRequest)
     });
+    
+    console.log('📊 Apollo API Response Status:', response.status, response.statusText);
     
     if (!response.ok) {
       let errorText = 'No details available';
       try {
         errorText = await response.text();
-        console.error('❌ Apollo API Error Response (FULL):', errorText);
+        console.error('❌ Apollo Direct API Error (FULL):', errorText);
       } catch (e) {
         console.error('❌ Could not read Apollo error response:', e.message);
       }
-      throw new Error(`Apollo scraper failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Apollo Direct API failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
     
-    const runData = await response.json();
-    console.log('✅ Apollo scraper initiated:', runData.data.id);
-    console.log('📊 FULL Apollo Response Data (NO TRUNCATION):');
-    console.log(JSON.stringify(runData, null, 2));
+    const enrichmentResult = await response.json();
+    console.log('✅ Apollo DIRECT ENRICHMENT COMPLETED');
+    console.log('📊 FULL Apollo Enrichment Data (NO TRUNCATION):');
+    console.log(JSON.stringify(enrichmentResult, null, 2));
     
-    // Return comprehensive data including the run information
+    // Return the complete enrichment data
     return { 
       success: true, 
-      runId: runData.data.id, 
-      data: {
-        message: 'Apollo full enrichment initiated',
-        runInfo: runData,
-        searchQuery: searchQuery,
-        personData: personInfo,
-        apolloUrl: apolloInput.url
-      }
+      method: 'direct_api',
+      data: enrichmentResult,
+      requestData: enrichmentRequest,
+      message: 'Apollo direct enrichment completed successfully'
     };
     
   } catch (error) {
-    console.error('❌ Apollo enrichment failed:', error);
+    console.error('❌ Apollo direct enrichment failed:', error);
     return { success: false, error: error.message, data: null };
   }
 }
