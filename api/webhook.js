@@ -316,7 +316,7 @@ async function runApolloEnrichment(personInfo, apifyToken) {
 }
 
 async function runLinkedInEnrichment(personInfo, apifyToken) {
-  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API');
+  console.log('🔗 BrightData LinkedIn scraper - using correct datasets v3 API (LATEST)');
   
   if (!personInfo.name) {
     console.log('⚠️ No person name provided, skipping LinkedIn enrichment');
