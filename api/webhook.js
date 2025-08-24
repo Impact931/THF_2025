@@ -299,7 +299,8 @@ async function runApolloEnrichment(personInfo, apolloApiKey) {
     
     // Enable personal contact details
     enrichmentRequest.reveal_personal_emails = true;
-    enrichmentRequest.reveal_phone_number = true;
+    // Note: reveal_phone_number requires webhook_url, so commenting out for now
+    // enrichmentRequest.reveal_phone_number = true;
     
     console.log('📤 Apollo Direct API Request:', JSON.stringify(enrichmentRequest, null, 2));
     
