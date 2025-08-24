@@ -210,9 +210,9 @@ async function triggerEnrichment(personInfo, webhookData) {
     const apolloResult = await runApolloEnrichment(personInfo, apolloApiKey);
     enrichmentResult.apollo_success = apolloResult.success;
     
-    // Run LinkedIn enrichment  
+    // Run LinkedIn enrichment (temporarily disabled)
     console.log('🔗 Starting LinkedIn enrichment...');
-    const linkedinResult = await runLinkedInEnrichment(personInfo, apifyToken);
+    const linkedinResult = await runLinkedInEnrichment(personInfo, null);
     enrichmentResult.linkedin_success = linkedinResult.success;
     
     // Store enriched data in Enrichment DB
