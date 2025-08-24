@@ -337,83 +337,33 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
-    // Build comprehensive enrichment record with all Apollo data
+    // Step 1: Check for existing record with same name to prevent duplicates
+    console.log('🔍 Checking for existing record with name:', personInfo.name);
+    const existingRecord = await findExistingEnrichmentRecord(personInfo.name, enrichmentDbId, notionToken);
+    
+    if (existingRecord) {
+      console.log('⚠️ Record already exists, updating instead of creating new one:', existingRecord.id);
+      return await updateExistingEnrichmentRecord(existingRecord.id, personInfo, apolloData, linkedinData, notionToken);
+    }
+    
+    // Step 2: Get Enrichment DB schema for intelligent field mapping
+    console.log('📋 Getting Enrichment DB schema for field mapping...');
+    const dbSchema = await getEnrichmentDBSchema(enrichmentDbId, notionToken);
+    
+    // Step 3: Build comprehensive enrichment record with all Apollo data
     const enrichmentRecord = {
       "Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       }
     };
     
-    // Add Apollo enrichment data if available
+    // Step 4: Map all Apollo data to appropriate fields
     if (apolloData && apolloData.success && apolloData.data && apolloData.data.person) {
-      const person = apolloData.data.person;
-      const org = person.organization;
-      
-      // Basic Information
-      if (person.email) {
-        enrichmentRecord["Primary Email"] = {
-          "email": person.email
-        };
-      }
-      
-      if (person.linkedin_url) {
-        enrichmentRecord["LinkedIn Profile"] = {
-          "url": person.linkedin_url
-        };
-      }
-      
-      if (person.title) {
-        enrichmentRecord["Current Position"] = {
-          "rich_text": [{ "text": { "content": person.title } }]
-        };
-      }
-      
-      if (person.headline) {
-        enrichmentRecord["Professional Headline"] = {
-          "rich_text": [{ "text": { "content": person.headline } }]
-        };
-      }
-      
-      // Employment History (store as formatted text)
-      if (person.employment_history && person.employment_history.length > 0) {
-        const employmentSummary = person.employment_history.map(job => 
-          `${job.title} at ${job.organization_name} (${job.start_date || 'Unknown'} - ${job.end_date || 'Current'})`
-        ).join('; ');
-        
-        enrichmentRecord["Employment History"] = {
-          "rich_text": [{ "text": { "content": employmentSummary } }]
-        };
-      }
-      
-      // Current Organization Information
-      if (org) {
-        if (org.name) {
-          enrichmentRecord["Current Company"] = {
-            "rich_text": [{ "text": { "content": org.name } }]
-          };
-        }
-        
-        if (org.industry) {
-          enrichmentRecord["Industry"] = {
-            "rich_text": [{ "text": { "content": org.industry } }]
-          };
-        }
-        
-        if (org.estimated_num_employees) {
-          enrichmentRecord["Company Size"] = {
-            "number": org.estimated_num_employees
-          };
-        }
-        
-        if (org.annual_revenue) {
-          enrichmentRecord["Company Revenue"] = {
-            "number": org.annual_revenue
-          };
-        }
-      }
+      const mappedFields = await mapApolloDataToEnrichmentFields(apolloData.data, dbSchema, notionToken);
+      Object.assign(enrichmentRecord, mappedFields);
     }
     
-    console.log('📝 Comprehensive enrichment record to create (Apollo data mapped):', JSON.stringify(enrichmentRecord, null, 2));
+    console.log('📝 Comprehensive enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
@@ -442,11 +392,419 @@ async function storeEnrichedData(personInfo, apolloData, linkedinData, notionTok
     const result = await response.json();
     console.log('✅ Enrichment record created:', result.id);
     
-    return { success: true, recordId: result.id };
+    return { success: true, recordId: result.id, action: 'created' };
     
   } catch (error) {
     console.error('❌ Failed to store enriched data:', error);
     return { success: false, error: error.message };
+  }
+}
+
+async function findExistingEnrichmentRecord(personName, enrichmentDbId, notionToken) {
+  console.log('🔍 Searching for existing record with name:', personName);
+  
+  try {
+    const response = await fetch(`https://api.notion.com/v1/databases/${enrichmentDbId}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filter: {
+          property: 'Name',
+          title: {
+            equals: personName
+          }
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('❌ Failed to search for existing record:', response.status, response.statusText);
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    if (data.results && data.results.length > 0) {
+      console.log('✅ Found existing record:', data.results[0].id);
+      return data.results[0];
+    }
+    
+    console.log('✅ No existing record found, will create new one');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error searching for existing record:', error);
+    return null;
+  }
+}
+
+async function updateExistingEnrichmentRecord(recordId, personInfo, apolloData, linkedinData, notionToken) {
+  console.log('🔄 Updating existing enrichment record:', recordId);
+  
+  try {
+    // Get current record to preserve existing data
+    const currentRecord = await fetch(`https://api.notion.com/v1/pages/${recordId}`, {
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28'
+      }
+    });
+    
+    if (!currentRecord.ok) {
+      throw new Error(`Failed to fetch existing record: ${currentRecord.status}`);
+    }
+    
+    const current = await currentRecord.json();
+    console.log('📄 Retrieved existing record for update');
+    
+    // Build update with new Apollo data while preserving existing fields
+    const updateProperties = {};
+    
+    if (apolloData && apolloData.success && apolloData.data && apolloData.data.person) {
+      // Get the database schema for intelligent mapping
+      const dbSchema = await getEnrichmentDBSchema("258c2a32-df0d-805b-acb0-d0f2c81630cd", notionToken);
+      const mappedFields = await mapApolloDataToEnrichmentFields(apolloData.data, dbSchema, notionToken);
+      Object.assign(updateProperties, mappedFields);
+    }
+    
+    console.log('📝 Updating existing record with new Apollo data:', JSON.stringify(updateProperties, null, 2));
+    
+    const response = await fetch(`https://api.notion.com/v1/pages/${recordId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        properties: updateProperties
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to update enrichment record: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Enrichment record updated:', result.id);
+    
+    return { success: true, recordId: result.id, action: 'updated' };
+    
+  } catch (error) {
+    console.error('❌ Failed to update existing enrichment record:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function getEnrichmentDBSchema(enrichmentDbId, notionToken) {
+  console.log('📋 Fetching Enrichment DB schema...');
+  
+  try {
+    const response = await fetch(`https://api.notion.com/v1/databases/${enrichmentDbId}`, {
+      headers: {
+        'Authorization': `Bearer ${notionToken}`,
+        'Notion-Version': '2022-06-28'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch database schema: ${response.status}`);
+    }
+    
+    const database = await response.json();
+    const properties = database.properties || {};
+    
+    console.log('✅ Retrieved database schema with', Object.keys(properties).length, 'fields');
+    console.log('📋 Available fields:', Object.keys(properties).join(', '));
+    
+    return properties;
+    
+  } catch (error) {
+    console.error('❌ Failed to fetch database schema:', error);
+    // Return basic schema as fallback
+    return {
+      "Name": { "type": "title" },
+      "Primary Email": { "type": "email" },
+      "LinkedIn Profile": { "type": "url" },
+      "Current Position": { "type": "rich_text" },
+      "Current Company": { "type": "rich_text" },
+      "Industry": { "type": "rich_text" },
+      "Employment History": { "type": "rich_text" }
+    };
+  }
+}
+
+async function mapApolloDataToEnrichmentFields(apolloResponse, dbSchema, notionToken) {
+  console.log('🤖 Mapping Apollo data to Enrichment DB fields...');
+  
+  const person = apolloResponse.person;
+  const org = person.organization;
+  const mappedFields = {};
+  
+  // Direct mappings for common fields
+  const directMappings = {
+    // Personal Information
+    'Primary Email': person.email,
+    'Email': person.email,
+    'Personal Email': person.email,
+    'Contact Email': person.email,
+    
+    'LinkedIn Profile': person.linkedin_url,
+    'LinkedIn URL': person.linkedin_url,
+    'LinkedIn': person.linkedin_url,
+    
+    'Current Position': person.title,
+    'Position': person.title,
+    'Title': person.title,
+    'Job Title': person.title,
+    
+    'Professional Headline': person.headline,
+    'Headline': person.headline,
+    'Bio': person.headline,
+    'Summary': person.headline,
+    
+    'Profile Photo URL': person.photo_url,
+    'Photo URL': person.photo_url,
+    'Avatar': person.photo_url,
+    'Profile Picture': person.photo_url,
+    
+    // Geographic Information
+    'City': person.city,
+    'Location': person.city && person.state ? `${person.city}, ${person.state}` : (person.city || person.state),
+    'State': person.state,
+    'Country': person.country,
+    'Address': person.formatted_address,
+    'Time Zone': person.time_zone,
+    
+    // Professional Classification
+    'Department': person.departments ? person.departments.join(', ') : null,
+    'Departments': person.departments ? person.departments.join(', ') : null,
+    'Seniority': person.seniority,
+    'Seniority Level': person.seniority,
+    'Level': person.seniority,
+    
+    // Social Media
+    'Twitter': person.twitter_url,
+    'Twitter URL': person.twitter_url,
+    'Facebook': person.facebook_url,
+    'Facebook URL': person.facebook_url,
+    'GitHub': person.github_url,
+    'GitHub URL': person.github_url,
+    
+    // Company Information (if organization exists)
+    'Current Company': org?.name,
+    'Company': org?.name,
+    'Organization': org?.name,
+    'Employer': org?.name,
+    
+    'Company Website': org?.website_url,
+    'Company URL': org?.website_url,
+    'Website': org?.website_url,
+    
+    'Company LinkedIn': org?.linkedin_url,
+    'Company LinkedIn URL': org?.linkedin_url,
+    
+    'Industry': org?.industry,
+    'Company Industry': org?.industry,
+    'Sector': org?.industry,
+    
+    'Company Size': org?.estimated_num_employees,
+    'Employee Count': org?.estimated_num_employees,
+    'Team Size': org?.estimated_num_employees,
+    
+    'Company Revenue': org?.annual_revenue,
+    'Annual Revenue': org?.annual_revenue,
+    'Revenue': org?.annual_revenue,
+    
+    'Company Phone': org?.primary_phone?.number,
+    'Company Contact': org?.primary_phone?.number,
+    'Office Phone': org?.primary_phone?.number,
+    
+    'Company Founded': org?.founded_year,
+    'Founded Year': org?.founded_year,
+    'Established': org?.founded_year,
+    
+    'Company Description': org?.short_description?.substring(0, 2000),
+    'Company Summary': org?.short_description?.substring(0, 2000),
+    'Organization Description': org?.short_description?.substring(0, 2000),
+  };
+  
+  // Apply direct mappings
+  for (const [fieldName, value] of Object.entries(directMappings)) {
+    if (value && dbSchema[fieldName]) {
+      mappedFields[fieldName] = formatFieldValue(value, dbSchema[fieldName].type);
+    }
+  }
+  
+  // Handle complex data structures
+  if (person.employment_history && person.employment_history.length > 0) {
+    const employmentSummary = person.employment_history.map(job => 
+      `${job.title} at ${job.organization_name} (${job.start_date || 'Unknown'} - ${job.end_date || 'Current'})`
+    ).join('; ');
+    
+    const employmentFields = ['Employment History', 'Work History', 'Experience', 'Career History', 'Job History'];
+    for (const field of employmentFields) {
+      if (dbSchema[field]) {
+        mappedFields[field] = formatFieldValue(employmentSummary, dbSchema[field].type);
+        break;
+      }
+    }
+  }
+  
+  // Technology Stack
+  if (org?.technology_names && org.technology_names.length > 0) {
+    const techStack = org.technology_names.slice(0, 10).join(', ');
+    const techFields = ['Technology Stack', 'Technologies', 'Tech Stack', 'Tools', 'Software'];
+    for (const field of techFields) {
+      if (dbSchema[field]) {
+        mappedFields[field] = formatFieldValue(techStack, dbSchema[field].type);
+        break;
+      }
+    }
+  }
+  
+  // Use OpenAI for unmapped fields with significant data
+  const unmappedData = extractUnmappedData(apolloResponse, mappedFields);
+  if (unmappedData.length > 0) {
+    console.log('🤖 Using OpenAI to map remaining data to best-fit fields...');
+    const aiMappedFields = await mapDataWithOpenAI(unmappedData, dbSchema, notionToken);
+    Object.assign(mappedFields, aiMappedFields);
+  }
+  
+  console.log('✅ Mapped', Object.keys(mappedFields).length, 'fields from Apollo data');
+  return mappedFields;
+}
+
+function formatFieldValue(value, fieldType) {
+  if (!value) return null;
+  
+  switch (fieldType) {
+    case 'title':
+      return { "title": [{ "text": { "content": String(value) } }] };
+    case 'rich_text':
+      return { "rich_text": [{ "text": { "content": String(value) } }] };
+    case 'email':
+      return { "email": String(value) };
+    case 'url':
+      return { "url": String(value) };
+    case 'phone_number':
+      return { "phone_number": String(value) };
+    case 'number':
+      return { "number": typeof value === 'number' ? value : parseInt(value) || 0 };
+    case 'select':
+      return { "select": { "name": String(value) } };
+    case 'multi_select':
+      const options = String(value).split(',').map(opt => ({ "name": opt.trim() }));
+      return { "multi_select": options };
+    case 'date':
+      return { "date": { "start": String(value) } };
+    case 'checkbox':
+      return { "checkbox": Boolean(value) };
+    default:
+      return { "rich_text": [{ "text": { "content": String(value) } }] };
+  }
+}
+
+function extractUnmappedData(apolloResponse, alreadyMapped) {
+  // Extract significant unmapped data for OpenAI processing
+  const unmappedData = [];
+  const person = apolloResponse.person;
+  const org = person.organization;
+  
+  // Check if certain complex data wasn't mapped
+  if (org?.keywords && org.keywords.length > 0 && !Object.keys(alreadyMapped).some(key => key.includes('keyword') || key.includes('tag'))) {
+    unmappedData.push({
+      data: org.keywords.join(', '),
+      context: 'Company keywords and business focus areas'
+    });
+  }
+  
+  if (org?.languages && org.languages.length > 0 && !Object.keys(alreadyMapped).some(key => key.includes('language'))) {
+    unmappedData.push({
+      data: org.languages.join(', '),
+      context: 'Languages used by the organization'
+    });
+  }
+  
+  if (person.intent_strength && !Object.keys(alreadyMapped).some(key => key.includes('intent'))) {
+    unmappedData.push({
+      data: `Intent strength: ${person.intent_strength}`,
+      context: 'Person\'s intent or buying signal strength'
+    });
+  }
+  
+  return unmappedData;
+}
+
+async function mapDataWithOpenAI(unmappedData, dbSchema, notionToken) {
+  console.log('🤖 Using OpenAI to intelligently map unmapped data...');
+  
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  if (!openaiApiKey) {
+    console.log('⚠️ OpenAI API key not available, skipping intelligent mapping');
+    return {};
+  }
+  
+  try {
+    const availableFields = Object.keys(dbSchema).filter(field => field !== 'Name');
+    const unmappedDataString = unmappedData.map(item => `${item.context}: ${item.data}`).join('\n');
+    
+    const prompt = `You are a data mapping expert. I have professional enrichment data that needs to be mapped to database fields.
+
+UNMAPPED DATA:
+${unmappedDataString}
+
+AVAILABLE DATABASE FIELDS:
+${availableFields.join(', ')}
+
+Please map the unmapped data to the most appropriate database fields. Consider:
+- Semantic meaning and context
+- Field names that suggest similar content
+- Professional/business relevance
+- Data types and format compatibility
+
+Respond with ONLY a JSON object mapping field names to values. No explanations.
+Example: {"Keywords": "value1, value2", "Languages": "English, Spanish"}`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 500
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`OpenAI API failed: ${response.status}`);
+    }
+    
+    const aiResponse = await response.json();
+    const mapping = JSON.parse(aiResponse.choices[0].message.content);
+    
+    // Format the AI-mapped fields according to database schema
+    const formattedMapping = {};
+    for (const [fieldName, value] of Object.entries(mapping)) {
+      if (dbSchema[fieldName] && value) {
+        formattedMapping[fieldName] = formatFieldValue(value, dbSchema[fieldName].type);
+      }
+    }
+    
+    console.log('🤖 OpenAI mapped', Object.keys(formattedMapping).length, 'additional fields');
+    return formattedMapping;
+    
+  } catch (error) {
+    console.error('❌ OpenAI mapping failed:', error);
+    return {};
   }
 }
 
