@@ -33,7 +33,9 @@ export default async function handler(req, res) {
     try {
       console.log('🎯 Webhook received!');
       console.log('Headers:', JSON.stringify(req.headers, null, 2));
-      console.log('Body:', JSON.stringify(req.body, null, 2));
+      console.log('Body (FULL DEBUG):', JSON.stringify(req.body, null, 2));
+      console.log('Body keys:', Object.keys(req.body || {}));
+      console.log('Body type:', typeof req.body);
 
       const webhookData = req.body;
       
@@ -114,6 +116,7 @@ export default async function handler(req, res) {
 
 function extractPersonFromWebhook(webhookData) {
   console.log('🔍 Extracting person from webhook...');
+  console.log('🔍 DEBUG: Full webhook data structure:', JSON.stringify(webhookData, null, 2));
   
   if (!webhookData) {
     console.log('❌ No webhook data');
@@ -122,14 +125,21 @@ function extractPersonFromWebhook(webhookData) {
 
   // Handle different payload structures
   let pageData;
+  console.log('🔍 DEBUG: webhookData.object =', webhookData.object);
+  console.log('🔍 DEBUG: webhookData keys:', Object.keys(webhookData));
+  
   if (webhookData.object === 'page') {
     pageData = webhookData;
+    console.log('🔍 DEBUG: Using direct page object');
   } else if (webhookData.data && webhookData.data.object === 'page') {
     pageData = webhookData.data;
+    console.log('🔍 DEBUG: Using webhookData.data');
   } else if (webhookData.pages && webhookData.pages.length > 0) {
     pageData = webhookData.pages[0];
+    console.log('🔍 DEBUG: Using webhookData.pages[0]');
   } else {
     console.log('❌ Could not find page data in:', Object.keys(webhookData));
+    console.log('❌ DEBUG: Full structure for analysis:', JSON.stringify(webhookData, null, 2));
     return null;
   }
 
