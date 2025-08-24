@@ -360,23 +360,178 @@ async function runLinkedInEnrichment(personInfo, apifyToken) {
 }
 
 async function storeEnrichedData(personInfo, apolloData, linkedinData, notionToken) {
-  console.log('💾 Storing enriched data with Apollo results in Enrichment DB...');
+  console.log('💾 Storing comprehensive Apollo enrichment data in Enrichment DB...');
   
   const enrichmentDbId = "258c2a32-df0d-805b-acb0-d0f2c81630cd";
   
   try {
-    // Start with the basic Name field and add Apollo data
+    // Build comprehensive enrichment record with all Apollo data
     const enrichmentRecord = {
       "Name": {
         "title": [{ "text": { "content": personInfo.name } }]
       }
     };
     
-    // For now, just store the name until we identify the correct field names
-    // This ensures the record gets created successfully
-    console.log('📝 Storing minimal record (Name only) - Apollo data will be available via API logs');
+    // Add Apollo enrichment data if available
+    if (apolloData && apolloData.success && apolloData.data && apolloData.data.person) {
+      const person = apolloData.data.person;
+      const org = person.organization;
+      
+      // Basic Information
+      if (person.email) {
+        enrichmentRecord["Primary Email"] = {
+          "email": person.email
+        };
+      }
+      
+      if (person.linkedin_url) {
+        enrichmentRecord["LinkedIn Profile"] = {
+          "url": person.linkedin_url
+        };
+      }
+      
+      if (person.title) {
+        enrichmentRecord["Current Position"] = {
+          "rich_text": [{ "text": { "content": person.title } }]
+        };
+      }
+      
+      if (person.headline) {
+        enrichmentRecord["Professional Headline"] = {
+          "rich_text": [{ "text": { "content": person.headline } }]
+        };
+      }
+      
+      if (person.photo_url) {
+        enrichmentRecord["Profile Photo URL"] = {
+          "url": person.photo_url
+        };
+      }
+      
+      // Geographic Information
+      if (person.city && person.state) {
+        enrichmentRecord["Location"] = {
+          "rich_text": [{ "text": { "content": `${person.city}, ${person.state}` } }]
+        };
+      }
+      
+      if (person.country) {
+        enrichmentRecord["Country"] = {
+          "rich_text": [{ "text": { "content": person.country } }]
+        };
+      }
+      
+      // Employment History (store as JSON text for comprehensive data)
+      if (person.employment_history && person.employment_history.length > 0) {
+        const employmentSummary = person.employment_history.map(job => 
+          `${job.title} at ${job.organization_name} (${job.start_date || 'Unknown'} - ${job.end_date || 'Current'})`
+        ).join('; ');
+        
+        enrichmentRecord["Employment History"] = {
+          "rich_text": [{ "text": { "content": employmentSummary } }]
+        };
+      }
+      
+      // Current Organization Information
+      if (org) {
+        if (org.name) {
+          enrichmentRecord["Current Company"] = {
+            "rich_text": [{ "text": { "content": org.name } }]
+          };
+        }
+        
+        if (org.industry) {
+          enrichmentRecord["Industry"] = {
+            "rich_text": [{ "text": { "content": org.industry } }]
+          };
+        }
+        
+        if (org.estimated_num_employees) {
+          enrichmentRecord["Company Size"] = {
+            "number": org.estimated_num_employees
+          };
+        }
+        
+        if (org.annual_revenue) {
+          enrichmentRecord["Company Revenue"] = {
+            "number": org.annual_revenue
+          };
+        }
+        
+        if (org.website_url) {
+          enrichmentRecord["Company Website"] = {
+            "url": org.website_url
+          };
+        }
+        
+        if (org.linkedin_url) {
+          enrichmentRecord["Company LinkedIn"] = {
+            "url": org.linkedin_url
+          };
+        }
+        
+        if (org.primary_phone && org.primary_phone.number) {
+          enrichmentRecord["Company Phone"] = {
+            "phone_number": org.primary_phone.number
+          };
+        }
+        
+        if (org.founded_year) {
+          enrichmentRecord["Company Founded"] = {
+            "number": org.founded_year
+          };
+        }
+        
+        // Company Description
+        if (org.short_description) {
+          enrichmentRecord["Company Description"] = {
+            "rich_text": [{ "text": { "content": org.short_description.substring(0, 2000) } }]
+          };
+        }
+        
+        // Technology Stack (store first 10 technologies)
+        if (org.technology_names && org.technology_names.length > 0) {
+          const techStack = org.technology_names.slice(0, 10).join(', ');
+          enrichmentRecord["Technology Stack"] = {
+            "rich_text": [{ "text": { "content": techStack } }]
+          };
+        }
+      }
+      
+      // Professional Classification
+      if (person.departments && person.departments.length > 0) {
+        enrichmentRecord["Department"] = {
+          "rich_text": [{ "text": { "content": person.departments.join(', ') } }]
+        };
+      }
+      
+      if (person.seniority) {
+        enrichmentRecord["Seniority Level"] = {
+          "rich_text": [{ "text": { "content": person.seniority } }]
+        };
+      }
+      
+      // Social Media
+      if (person.twitter_url) {
+        enrichmentRecord["Twitter URL"] = {
+          "url": person.twitter_url
+        };
+      }
+      
+      if (person.facebook_url) {
+        enrichmentRecord["Facebook URL"] = {
+          "url": person.facebook_url
+        };
+      }
+      
+      if (person.github_url) {
+        enrichmentRecord["GitHub URL"] = {
+          "url": person.github_url
+        };
+      }
+    }
     
-    console.log('📝 Enhanced enrichment record to create:', JSON.stringify(enrichmentRecord, null, 2));
+    console.log('📝 Comprehensive enrichment record to create (Apollo data mapped):', JSON.stringify(enrichmentRecord, null, 2));
     
     const response = await fetch(`https://api.notion.com/v1/pages`, {
       method: 'POST',
