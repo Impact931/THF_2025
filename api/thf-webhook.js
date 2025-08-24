@@ -545,137 +545,227 @@ async function mapApolloDataToEnrichmentFields(apolloResponse, dbSchema, notionT
   const org = person.organization;
   const mappedFields = {};
   
-  // Direct mappings for common fields
-  const directMappings = {
-    // Personal Information
-    'Primary Email': person.email,
-    'Email': person.email,
-    'Personal Email': person.email,
-    'Contact Email': person.email,
-    
-    'LinkedIn Profile': person.linkedin_url,
-    'LinkedIn URL': person.linkedin_url,
-    'LinkedIn': person.linkedin_url,
-    
-    'Current Position': person.title,
-    'Position': person.title,
-    'Title': person.title,
-    'Job Title': person.title,
-    
-    'Professional Headline': person.headline,
-    'Headline': person.headline,
-    'Bio': person.headline,
-    'Summary': person.headline,
-    
-    'Profile Photo URL': person.photo_url,
-    'Photo URL': person.photo_url,
-    'Avatar': person.photo_url,
-    'Profile Picture': person.photo_url,
-    
-    // Geographic Information
-    'City': person.city,
-    'Location': person.city && person.state ? `${person.city}, ${person.state}` : (person.city || person.state),
-    'State': person.state,
-    'Country': person.country,
-    'Address': person.formatted_address,
-    'Time Zone': person.time_zone,
-    
-    // Professional Classification
-    'Department': person.departments ? person.departments.join(', ') : null,
-    'Departments': person.departments ? person.departments.join(', ') : null,
-    'Seniority': person.seniority,
-    'Seniority Level': person.seniority,
-    'Level': person.seniority,
-    
-    // Social Media
-    'Twitter': person.twitter_url,
-    'Twitter URL': person.twitter_url,
-    'Facebook': person.facebook_url,
-    'Facebook URL': person.facebook_url,
-    'GitHub': person.github_url,
-    'GitHub URL': person.github_url,
-    
-    // Company Information (if organization exists)
-    'Current Company': org?.name,
-    'Company': org?.name,
-    'Organization': org?.name,
-    'Employer': org?.name,
-    
-    'Company Website': org?.website_url,
-    'Company URL': org?.website_url,
-    'Website': org?.website_url,
-    
-    'Company LinkedIn': org?.linkedin_url,
-    'Company LinkedIn URL': org?.linkedin_url,
-    
-    'Industry': org?.industry,
-    'Company Industry': org?.industry,
-    'Sector': org?.industry,
-    
-    'Company Size': org?.estimated_num_employees,
-    'Employee Count': org?.estimated_num_employees,
-    'Team Size': org?.estimated_num_employees,
-    
-    'Company Revenue': org?.annual_revenue,
-    'Annual Revenue': org?.annual_revenue,
-    'Revenue': org?.annual_revenue,
-    
-    'Company Phone': org?.primary_phone?.number,
-    'Company Contact': org?.primary_phone?.number,
-    'Office Phone': org?.primary_phone?.number,
-    
-    'Company Founded': org?.founded_year,
-    'Founded Year': org?.founded_year,
-    'Established': org?.founded_year,
-    
-    'Company Description': org?.short_description?.substring(0, 2000),
-    'Company Summary': org?.short_description?.substring(0, 2000),
-    'Organization Description': org?.short_description?.substring(0, 2000),
+  // First, create structured data output for logging and AI assessment
+  const structuredData = {
+    apollo_person_data: {
+      id: person.id,
+      name: person.name,
+      first_name: person.first_name,
+      last_name: person.last_name,
+      email: person.email,
+      linkedin_url: person.linkedin_url,
+      title: person.title,
+      headline: person.headline,
+      photo_url: person.photo_url,
+      city: person.city,
+      state: person.state,
+      country: person.country,
+      time_zone: person.time_zone,
+      departments: person.departments,
+      seniority: person.seniority,
+      employment_history: person.employment_history
+    },
+    apollo_organization_data: org ? {
+      id: org.id,
+      name: org.name,
+      website_url: org.website_url,
+      linkedin_url: org.linkedin_url,
+      industry: org.industry,
+      estimated_num_employees: org.estimated_num_employees,
+      annual_revenue: org.annual_revenue,
+      founded_year: org.founded_year,
+      short_description: org.short_description,
+      technology_names: org.technology_names,
+      keywords: org.keywords,
+      languages: org.languages,
+      primary_phone: org.primary_phone?.number,
+      city: org.city,
+      state: org.state,
+      country: org.country,
+      address: org.raw_address
+    } : null
   };
   
-  // Apply direct mappings
-  for (const [fieldName, value] of Object.entries(directMappings)) {
+  console.log('📊 STRUCTURED APOLLO DATA:', JSON.stringify(structuredData, null, 2));
+  
+  // Direct mappings to actual database field names (from your 298-field schema)
+  const apolloFieldMappings = {
+    // Apollo-specific fields (exact matches from your schema)
+    'Apollo Email': person.email,
+    'Apollo LinkedIn URL': person.linkedin_url,
+    'Apollo Title': person.title,
+    'Apollo City': person.city,
+    'Apollo State': person.state,
+    'Apollo Country': person.country,
+    'Apollo Department': person.departments ? person.departments.join(', ') : null,
+    'Apollo Seniority': person.seniority,
+    'Apollo Company': org?.name,
+    'Apollo Industry': org?.industry,
+    'Apollo Company Size': org?.estimated_num_employees,
+    'Apollo Revenue Range': org?.annual_revenue,
+    'Apollo Phone': org?.primary_phone?.number,
+    'Apollo Raw Data': JSON.stringify(apolloResponse, null, 2),
+    
+    // LinkedIn-specific fields from Apollo data
+    'LinkedIn Headline': person.headline,
+    'LinkedIn Location': person.city && person.state ? `${person.city}, ${person.state}` : (person.city || person.state),
+    'LinkedIn Current Company': org?.name,
+    'LinkedIn Current Position': person.title,
+    'LinkedIn Public Profile URL': person.linkedin_url,
+    'LinkedIn Raw Data': JSON.stringify(person, null, 2),
+    
+    // Occupational fields
+    'Occupational Current Job Title': person.title,
+    'Occupational Current Employer': org?.name,
+    'Occupational Raw Data': JSON.stringify({
+      employment_history: person.employment_history,
+      current_title: person.title,
+      departments: person.departments,
+      seniority: person.seniority
+    }),
+    
+    // Demographic fields
+    'Demographic Age': null, // Apollo doesn't provide age directly
+    'Demographic Raw Data': JSON.stringify({
+      location: `${person.city}, ${person.state}, ${person.country}`,
+      time_zone: person.time_zone
+    }),
+    
+    // Personal fields
+    'Personal Email Addresses': person.email,
+    'Personal Raw Data': JSON.stringify({
+      photo_url: person.photo_url,
+      personal_emails: person.personal_emails
+    })
+  };
+  
+  // Apply Apollo field mappings based on actual database schema
+  for (const [fieldName, value] of Object.entries(apolloFieldMappings)) {
     if (value && dbSchema[fieldName]) {
       mappedFields[fieldName] = formatFieldValue(value, dbSchema[fieldName].type);
+      console.log(`✅ Mapped ${fieldName}: ${typeof value === 'string' ? value.substring(0, 50) + '...' : value}`);
     }
   }
   
-  // Handle complex data structures
+  // Handle employment history with detailed mapping
   if (person.employment_history && person.employment_history.length > 0) {
-    const employmentSummary = person.employment_history.map(job => 
-      `${job.title} at ${job.organization_name} (${job.start_date || 'Unknown'} - ${job.end_date || 'Current'})`
-    ).join('; ');
+    // Current job from employment history
+    const currentJob = person.employment_history.find(job => job.current === true);
+    const previousJobs = person.employment_history.filter(job => job.current !== true);
     
-    const employmentFields = ['Employment History', 'Work History', 'Experience', 'Career History', 'Job History'];
-    for (const field of employmentFields) {
-      if (dbSchema[field]) {
-        mappedFields[field] = formatFieldValue(employmentSummary, dbSchema[field].type);
-        break;
-      }
+    // LinkedIn Experience mapping
+    if (dbSchema['LinkedIn Experience']) {
+      const experienceData = person.employment_history.map(job => ({
+        title: job.title,
+        company: job.organization_name,
+        start_date: job.start_date,
+        end_date: job.end_date || (job.current ? 'Present' : null),
+        current: job.current
+      }));
+      
+      mappedFields['LinkedIn Experience'] = formatFieldValue(JSON.stringify(experienceData), dbSchema['LinkedIn Experience'].type);
+      console.log('✅ Mapped LinkedIn Experience with employment history');
+    }
+    
+    // LinkedIn Experience Count
+    if (dbSchema['LinkedIn Experience Count']) {
+      mappedFields['LinkedIn Experience Count'] = formatFieldValue(person.employment_history.length, dbSchema['LinkedIn Experience Count'].type);
+      console.log('✅ Mapped LinkedIn Experience Count:', person.employment_history.length);
+    }
+    
+    // Occupational Career Trajectory
+    if (dbSchema['Occupational Career Trajectory']) {
+      const trajectory = person.employment_history.map(job => 
+        `${job.title} at ${job.organization_name} (${job.start_date || 'Unknown'} - ${job.end_date || 'Current'})`
+      ).join(' → ');
+      
+      mappedFields['Occupational Career Trajectory'] = formatFieldValue(trajectory, dbSchema['Occupational Career Trajectory'].type);
+      console.log('✅ Mapped Occupational Career Trajectory');
     }
   }
   
-  // Technology Stack
+  // Technology and social media mappings
+  const additionalMappings = {
+    'Apollo Technographics': org?.technology_names ? org.technology_names.join(', ') : null,
+    'Apollo Social Media Presence': person.linkedin_url ? 'LinkedIn' : null,
+    'Apollo Twitter Handle': person.twitter_url,
+    'Apollo Facebook Profile': person.facebook_url,
+    'Apollo GitHub Profile': person.github_url,
+    'Apollo Instagram Handle': null, // Apollo doesn't provide Instagram
+    'Apollo Languages Spoken': org?.languages ? org.languages.join(', ') : null,
+    'Apollo Military Service': person.employment_history?.some(job => 
+      job.organization_name?.toLowerCase().includes('navy') || 
+      job.organization_name?.toLowerCase().includes('army') ||
+      job.organization_name?.toLowerCase().includes('military') ||
+      job.title?.toLowerCase().includes('naval')
+    ) ? 'Yes' : 'No',
+    'Apollo Intent Data': person.intent_strength || null,
+    'Apollo Phone Verified': person.phone ? 'Yes' : 'No',
+    'Apollo Email Verified': person.email ? 'Yes' : 'No',
+    'Apollo Phone Source': person.phone ? 'Apollo API' : null,
+    'Apollo Email Source': person.email ? 'Apollo API' : null,
+    'Last Apollo Sync': new Date().toISOString(),
+    
+    // Set sync statuses
+    'Sync Status': 'Active',
+    'Enrichment Status': 'Completed',
+    'Data Sources': 'Apollo API',
+    'Enrichment Date': new Date().toISOString(),
+    'Last Updated': new Date().toISOString(),
+    'Completeness Score': Object.keys(mappedFields).length, // Will update after all mapping
+    'Data Confidence': 'High - Apollo Verified',
+    'Next Review Date': new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 90 days from now
+  };
+  
+  // Apply additional mappings
+  for (const [fieldName, value] of Object.entries(additionalMappings)) {
+    if (value && dbSchema[fieldName]) {
+      mappedFields[fieldName] = formatFieldValue(value, dbSchema[fieldName].type);
+      console.log(`✅ Mapped ${fieldName}: ${typeof value === 'string' ? value.substring(0, 50) + '...' : value}`);
+    }
+  }
+  
+  // Use OpenAI for complex data like keywords and remaining unmapped fields
+  const unmappedData = [];
+  
+  // Organization keywords for AI mapping
+  if (org?.keywords && org.keywords.length > 0) {
+    unmappedData.push({
+      data: org.keywords.join(', '),
+      context: 'Company business keywords and focus areas - map to psychographic or relational fields'
+    });
+  }
+  
+  // Technology stack for AI mapping
   if (org?.technology_names && org.technology_names.length > 0) {
-    const techStack = org.technology_names.slice(0, 10).join(', ');
-    const techFields = ['Technology Stack', 'Technologies', 'Tech Stack', 'Tools', 'Software'];
-    for (const field of techFields) {
-      if (dbSchema[field]) {
-        mappedFields[field] = formatFieldValue(techStack, dbSchema[field].type);
-        break;
-      }
-    }
+    unmappedData.push({
+      data: org.technology_names.join(', '),
+      context: 'Company technology stack and tools - map to occupational or psychographic fields'
+    });
   }
   
-  // Use OpenAI for unmapped fields with significant data
-  const unmappedData = extractUnmappedData(apolloResponse, mappedFields);
+  // Company description for AI mapping
+  if (org?.short_description) {
+    unmappedData.push({
+      data: org.short_description,
+      context: 'Detailed company description - extract insights for demographic, psychographic, or relational fields'
+    });
+  }
+  
   if (unmappedData.length > 0) {
-    console.log('🤖 Using OpenAI to map remaining data to best-fit fields...');
+    console.log('🤖 Using OpenAI to intelligently map remaining complex data...');
     const aiMappedFields = await mapDataWithOpenAI(unmappedData, dbSchema, notionToken);
     Object.assign(mappedFields, aiMappedFields);
   }
   
-  console.log('✅ Mapped', Object.keys(mappedFields).length, 'fields from Apollo data');
+  // Update completeness score
+  if (dbSchema['Completeness Score']) {
+    mappedFields['Completeness Score'] = formatFieldValue(Object.keys(mappedFields).length, dbSchema['Completeness Score'].type);
+  }
+  
+  console.log('✅ Mapped', Object.keys(mappedFields).length, 'total fields from Apollo data');
+  console.log('📋 Fields mapped:', Object.keys(mappedFields).join(', '));
+  
   return mappedFields;
 }
 
