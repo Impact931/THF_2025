@@ -22,7 +22,7 @@ export default async function handler(req, res) {
         node_version: process.version
       },
       endpoints: {
-        webhook: 'https://thf-2025.vercel.app/api/webhook',
+        webhook: 'https://thf-2025-5rltohj6a-impact931.vercel.app/api/webhook',
         test: 'Send POST with Notion page data to trigger enrichment'
       }
     });
